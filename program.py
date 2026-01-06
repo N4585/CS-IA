@@ -20,6 +20,7 @@ cursor.execute("""
 CREATE TABLE IF NOT EXISTS Courses (
     CourseID    INTEGER PRIMARY KEY,
     CourseName  TEXT,
+    CourseLevel TEXT,
     TeacherName TEXT
 );
 """)
@@ -37,6 +38,18 @@ CREATE TABLE IF NOT EXISTS Enrolments (
     FOREIGN KEY (CourseID) REFERENCES Courses(CourseID)
 );
 """)
+
+# adds assessments to the list 
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS Assessments (
+    AssessmentID INTEGER PRIMARY KEY AUTOINCREMENT,
+    CourseID     INTEGER NOT NULL,
+    DueDate      TEXT NOT NULL,
+    Priority     INTEGER CHECK (Priority IN (0,1)),
+    FOREIGN KEY (CourseID) REFERENCES Courses(CourseID)
+);
+""")
+
 # ---------------------------
 # 5. Save changes and close
 # ---------------------------
@@ -73,25 +86,36 @@ def delete_student():
 def add_course():
     id= int(input("Enter Course ID:"))
     courseName= input("Enter Course Name:")
+    courseLevel = input("Enter Course Level:")
     teacher= input("Enter Teacher Name:")
-    sql="INSERT INTO Courses (CourseID,CourseName,TeacherName)VALUES (?,?,?)"
-    cursor.execute(sql, (id,courseName,teacher))
+    sql="INSERT INTO Courses (CourseID,CourseName,CourseLevel,TeacherName)VALUES (?,?,?,?)"
+    cursor.execute(sql, (id,courseName,courseLevel,teacher))
     conn.commit()
     print("Course added successfully")
+
+def delete_course():
+    print("Course list")
+    print("--------------------------------")
+    view_course()
+    courseid= input("Enter Course ID to remove:")
+    sql= "DELETE FROM Courses WHERE CourseID=?"
+    cursor.execute(sql,(courseid,))
+    conn.commit()
+    print("Course removed successfully")
 
 def view_course():
     sql="SELECT * FROM Courses"
     rows=cursor.execute(sql)
-    print("id | name | teacher")
+    print("id | name | level | teacher")
     for row in rows:
-        print(row[0],row[1],row[2])
+        print(row[0],row[1],row[2],row[3])
 
 def add_enrolment():
     #shows the list of student iD
     print("Student list")
     print("--------------------------------")
     view_student()
-    studentid= input("Enter Student ID to enrol:")
+    studentid= input("Enter Student ID to enroll:")
     print("Course list")
     print("--------------------------------")
     view_course()
@@ -103,7 +127,7 @@ def add_enrolment():
 
 
 def view_enrolment():
-    sql="""SELECT Students.StudentID,Students.Fname,Students.Lname,Courses.CourseID,Courses.Coursename,Courses.teachername 
+    sql="""SELECT Students.StudentID,Students.Fname,Students.Lname,Courses.CourseID,Courses.Coursename,Courses.CourseLevel,Courses.teachername 
     FROM Enrolments
     INNER JOIN Students ON Enrolments.StudentID = Students.StudentID
     INNER JOIN Courses ON Enrolments.CourseID = Courses.CourseID
@@ -114,7 +138,20 @@ def view_enrolment():
     for row in rows:
         print(row[0],"|",row[1],"|",row[2],"|",row[3],"|",row[4],"|",row[5])
 
+def add_assessment():
+    print("------ADD ASSESSMENT-----")
+    view_course()
+    course_id = int(input("Enter Course ID: "))
+    due_date = input("Enter Due Date (YYYY-MM-DD): ")
+    priority = int(input("Priority (1 = Major, 0 = Minor): "))
 
+    sql = """
+    INSERT INTO Assessments (CourseID, DueDate, Priority)
+    VALUES (?, ?, ?)
+    """
+    cursor.execute(sql, (course_id, due_date, priority))
+    conn.commit()
+    print("Assessment added successfully")
 while True:
     cursor = conn.cursor()
     conn.commit()
@@ -124,8 +161,10 @@ while True:
         print("press 2 to View all students")
         print("press 3 to Delete Student")
         print("press 4 to Add Course")
-        print("press 5 to Add enrolment")
-        print("press 6 to View all Enrolments")
+        print("press 5 to Remove Course")
+        print("press 6 to Add enrolment")
+        print("press 7 to View all Enrolments")
+        print("press 8 to Add Assessment")
         print("press 0 to exit")
         user=int(input())
         if user==0:
@@ -139,13 +178,19 @@ while True:
         elif user==4:
             add_course()
         elif user==5:
-            add_enrolment()
+            delete_course()
         elif user==6:
+            add_enrolment()
+        elif user==7:
             view_enrolment()
+        elif user==8:
+            add_assessment()
+        elif user==9:
+            view_course()
 
 
 
     except sqlite3.Error as e:
         print(e)
-    cursor.close()
+
 conn.close()
