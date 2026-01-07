@@ -151,7 +151,25 @@ def add_assessment():
     """
     cursor.execute(sql, (course_id, due_date, priority))
     conn.commit()
+
+def detect_assessment_conflicts():
+    sql = """
+    SELECT 
+        e.StudentID,
+        s.Fname,
+        s.Lname,
+        strftime('%Y-%W', a.DueDate) AS YearWeek,
+        COUNT(*) AS MajorCount
+    FROM Enrolments e
+    JOIN Students s ON e.StudentID = s.StudentID
+    JOIN Assessments a ON e.CourseID = a.CourseID
+    WHERE a.Priority = 1
+    GROUP BY e.StudentID, YearWeek
+    HAVING COUNT(*) > 3
+    ORDER BY YearWeek, s.Fname;
+    """
     print("Assessment added successfully")
+
 while True:
     cursor = conn.cursor()
     conn.commit()
@@ -185,9 +203,9 @@ while True:
             view_enrolment()
         elif user==8:
             add_assessment()
+            detect_assessment_conflicts()
         elif user==9:
             view_course()
-
 
 
     except sqlite3.Error as e:
