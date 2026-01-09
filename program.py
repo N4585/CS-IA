@@ -1,4 +1,8 @@
 import sqlite3
+import os 
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "csiaa.db")
 
 conn = sqlite3.connect("csiaa.db")
 cursor = conn.cursor()
@@ -38,7 +42,7 @@ CREATE TABLE IF NOT EXISTS Courses (
 # This table links Students and Courses using foreign keys.
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS Enrollments (
-    EnrollmentID NUMERIC PRIMARY KEY,
+    EnrollmentID NUMERIC PRIMARY KEY AUTOINCREMENT,
     StudentID   TEXT,
     CourseID    NUMERIC,
     FOREIGN KEY (StudentID) REFERENCES Students(StudentID),
@@ -50,6 +54,7 @@ CREATE TABLE IF NOT EXISTS Enrollments (
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS Assessments (
     AssessmentID INTEGER PRIMARY KEY AUTOINCREMENT,
+    AssessmentName    TEXT NOT NULL,
     CourseID     NUMERIC NOT NULL,
     DueDate      TEXT NOT NULL,
     Priority     INTEGER CHECK (Priority IN (0,1)),
@@ -93,7 +98,7 @@ def add_course():
     id= int(input("Enter Course ID:"))
     courseName= input("Enter Course Name:")
     courseLevel = input("Enter Course Level:")
-    teacher= input("Enter Teacher ID:")
+    teacher= int(input("Enter Teacher ID:"))
     sql="INSERT INTO Courses (CourseID,CourseName,CourseLevel,TeacherID)VALUES (?,?,?,?)"
     cursor.execute(sql, (id,courseName,courseLevel,teacher))
     conn.commit()
@@ -133,10 +138,10 @@ def add_enrollment():
 
 
 def view_enrollment():
-    sql="""SELECT Students.StudentID,Students.Fname,Students.Lname,Courses.CourseID,Courses.Coursename,Courses.CourseLevel,Courses.teachername 
+    sql="""SELECT Students.StudentID,Students.Name,Courses.CourseID,Courses.CourseName,Courses.CourseLevel
     FROM Enrollments
-    INNER JOIN Students ON Enrollments.StudentID = Students.StudentID
-    INNER JOIN Courses ON Enrollments.CourseID = Courses.CourseID
+    JOIN Students ON Enrollments.StudentID = Students.StudentID
+    JOIN Courses ON Enrollments.CourseID = Courses.CourseID;
     """
     rows=cursor.execute(sql)
     print("ID | FName | LName | CourseID | CourseName | TeacherName")
@@ -148,15 +153,33 @@ def add_assessment():
     print("------ADD ASSESSMENT-----")
     view_course()
     course_id = int(input("Enter Course ID: "))
+    assessment_name = input("Enter Assessment Name: ")
     due_date = input("Enter Due Date (YYYY-MM-DD): ")
     priority = int(input("Priority (1 = Major, 0 = Minor): "))
 
     sql = """
-    INSERT INTO Assessments (CourseID, DueDate, Priority)
+    INSERT INTO Assessments (CourseID, AssessmentName, DueDate, Priority)
     VALUES (?, ?, ?)
     """
-    cursor.execute(sql, (course_id, due_date, priority))
+    cursor.execute(sql, (course_id, assessment_name, due_date, priority))
     conn.commit()
+
+def view_assessment():
+    sql="SELECT * FROM Assessments"
+    rows=cursor.execute(sql)
+    print("id | name | DueDate | Priority")
+    for row in rows:
+        print(row[0],row[1],row[2],row[3])
+
+def delete_assessment():
+    print("Assessment list")
+    print("--------------------------------")
+    view_assessment()
+    courseid= input("Enter Assessment ID to remove:")
+    sql= "DELETE FROM Assessments WHERE AssessmentID=?"
+    cursor.execute(sql,(courseid,))
+    conn.commit()
+    print("Assessment removed successfully")
 
 def detect_assessment_conflicts():
     sql = """
@@ -200,6 +223,8 @@ while True:
         print("press 6 to Add enrollment")
         print("press 7 to View all Enrollments")
         print("press 8 to Add Assessment")
+        print("press 9 to View Assessment")
+        print("press 10 to Delete Assessment")
         print("press 0 to exit")
         user=int(input())
         if user==0:
@@ -221,7 +246,10 @@ while True:
         elif user==8:
             add_assessment()
             detect_assessment_conflicts()
-
+        elif user==9:
+            view_assessment()
+        elif user == 10:
+            delete_assessment()
 
 
     except sqlite3.Error as e:
