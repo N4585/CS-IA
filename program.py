@@ -156,10 +156,9 @@ def add_assessment():
     assessment_name = input("Enter Assessment Name: ")
     due_date = input("Enter Due Date (YYYY-MM-DD): ")
     priority = int(input("Priority (1 = Major, 0 = Minor): "))
-
     sql = """
     INSERT INTO Assessments (CourseID, AssessmentName, DueDate, Priority)
-    VALUES (?, ?, ?)
+    VALUES (?, ?, ?, ?)
     """
     cursor.execute(sql, (course_id, assessment_name, due_date, priority))
     conn.commit()
@@ -250,6 +249,8 @@ while True:
             view_assessment()
         elif user == 10:
             delete_assessment()
+        elif user== 11:
+            detect_assessment_conflicts()
 
 
     except sqlite3.Error as e:
