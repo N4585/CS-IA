@@ -4,7 +4,7 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "csiaa.db")
 
-conn = sqlite3.connect("csiaa.db")
+conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
 
 cursor.execute("PRAGMA foreign_keys = ON")
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS Students (
 # create teacher table
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS Teacher (
-    TeacherID   NUMERIC PRIMARY KEY,
+    TeacherID   INTEGER PRIMARY KEY,
     TeacherName    TEXT
 );
 """)
@@ -144,10 +144,10 @@ def view_enrollment():
     JOIN Courses ON Enrollments.CourseID = Courses.CourseID;
     """
     rows=cursor.execute(sql)
-    print("ID | FName | LName | CourseID | CourseName | TeacherName")
+    print("EnrollmentID | StudentID | CourseID")
 
     for row in rows:
-        print(row[0],"|",row[1],"|",row[2],"|",row[3],"|",row[4],"|",row[5])
+        print(row[0],"|",row[1],"|",row[2], "|",row[3],"|",row[4])
 
 def add_assessment():
     print("------ADD ASSESSMENT-----")
@@ -166,7 +166,7 @@ def add_assessment():
 def view_assessment():
     sql="SELECT * FROM Assessments"
     rows=cursor.execute(sql)
-    print("id | name | DueDate | Priority")
+    print("AssessmentID | AssessmentName | CourseID | DueDate | Priority")
     for row in rows:
         print(row[0],row[1],row[2],row[3])
 
@@ -224,6 +224,8 @@ while True:
         print("press 8 to Add Assessment")
         print("press 9 to View Assessment")
         print("press 10 to Delete Assessment")
+        print("press 11 to view clashes")
+        
         print("press 0 to exit")
         user=int(input())
         if user==0:
