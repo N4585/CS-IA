@@ -169,7 +169,7 @@ def view_assessment():
     rows=cursor.execute(sql)
     print("AssessmentID | AssessmentName | CourseID | DueDate | Priority")
     for row in rows:
-        print(row[0],row[1],row[2],row[3], row[4])
+        print(row[0],row[1],row[2],row[3], row)
 
 def delete_assessment():
     print("Assessment list")
@@ -183,18 +183,42 @@ def delete_assessment():
 
 def detect_assessment_conflicts():
     sql = """
-    SELECT 
-        e.StudentID,
-        s.Name,
-        strftime('%Y-%W', a.DueDate) AS YearWeek,
-        COUNT(*) AS MajorCount
-    FROM Enrollments e
-    JOIN Students s ON e.StudentID = s.StudentID
-    JOIN Assessments a ON e.CourseID = a.CourseID
+    WITH Overloads AS (
+        SELECT
+            e.StudentID,
+            strftime('%Y-%W', a.DueDate) AS YearWeek,
+            COUNT(*) AS MajorCount
+        FROM Enrollments e
+        JOIN Assessments a ON e.CourseID = a.CourseID
+        WHERE a.Priority = 1
+        GROUP BY e.StudentID, YearWeek
+        HAVING COUNT(*) > 3
+    )
+    SELECT
+        o.StudentID,
+        s.Name AS StudentName,
+        o.YearWeek,
+        o.MajorCount,
+
+        a.AssessmentID,
+        a.AssessmentName,
+        a.DueDate,
+        a.CreatedAt,
+
+        c.CourseID,
+        c.CourseName,
+        c.CourseLevel,
+
+        t.TeacherName
+    FROM Overloads o
+    JOIN Students s ON s.StudentID = o.StudentID
+    JOIN Enrollments e ON e.StudentID = o.StudentID
+    JOIN Assessments a ON a.CourseID = e.CourseID
+    JOIN Courses c ON c.CourseID = a.CourseID
+    LEFT JOIN Teacher t ON t.TeacherID = c.TeacherID
     WHERE a.Priority = 1
-    GROUP BY e.StudentID, YearWeek
-    HAVING COUNT(*) > 3
-    ORDER BY YearWeek, s.Name;
+      AND strftime('%Y-%W', a.DueDate) = o.YearWeek
+    ORDER BY o.YearWeek, s.Name, a.DueDate, c.CourseName, a.AssessmentName;
     """
 
     rows = cursor.execute(sql).fetchall()
@@ -203,11 +227,28 @@ def detect_assessment_conflicts():
         print("No assessment conflicts detected.")
         return
 
-    print("ASSESSMENT CONFLICTS DETECTED")
-    print("StudentID | Name | Week | Major Assessments")
-
+    # Group in Python for readable output
+    current_key = None
     for r in rows:
-        print(f"{r[0]} | {r[1]} | {r[2]} | {r[3]}")
+        student_id, student_name, year_week, major_count = r[0], r[1], r[2], r[3]
+        key = (student_id, year_week)
+
+        if key != current_key:
+            if current_key is not None:
+                print("-" * 60)
+            print("ASSESSMENT CONFLICT")
+            print(f"Student: {student_id} | {student_name}")
+            print(f"Week: {year_week} | Major assessments: {major_count}")
+            print("AssessmentID | AssessmentName | DueDate | CreatedAt | Course | Level | Teacher")
+            current_key = key
+
+        assessment_id, assessment_name, due_date, created_at = r[4], r[5], r[6], r[7]
+        course_id, course_name, course_level, teacher_name = r[8], r[9], r[10], r[11]
+
+        print(
+            f"{assessment_id} | {assessment_name} | {due_date} | {created_at} | "
+            f"{course_id}-{course_name} | {course_level} | {teacher_name}"
+        )
 
 
 while True:
