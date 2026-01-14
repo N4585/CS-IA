@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS Courses (
 # This table links Students and Courses using foreign keys.
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS Enrollments (
-    EnrollmentID NUMERIC PRIMARY KEY AUTOINCREMENT,
+    EnrollmentID INTEGER PRIMARY KEY AUTOINCREMENT,
     StudentID   TEXT,
     CourseID    NUMERIC,
     FOREIGN KEY (StudentID) REFERENCES Students(StudentID),
@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS Assessments (
     CourseID     NUMERIC NOT NULL,
     DueDate      TEXT NOT NULL,
     Priority     INTEGER CHECK (Priority IN (0,1)),
+    CreatedAt TEXT DEFAULT (datetime('now','localtime')),
     FOREIGN KEY (CourseID) REFERENCES Courses(CourseID)
 );
 """)
@@ -157,8 +158,8 @@ def add_assessment():
     due_date = input("Enter Due Date (YYYY-MM-DD): ")
     priority = int(input("Priority (1 = Major, 0 = Minor): "))
     sql = """
-    INSERT INTO Assessments (CourseID, AssessmentName, DueDate, Priority)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO Assessments (CourseID, AssessmentName, DueDate, Priority, CreatedAt)
+    VALUES (?, ?, ?, ?, datetime('now','localtime'))
     """
     cursor.execute(sql, (course_id, assessment_name, due_date, priority))
     conn.commit()
@@ -168,7 +169,7 @@ def view_assessment():
     rows=cursor.execute(sql)
     print("AssessmentID | AssessmentName | CourseID | DueDate | Priority")
     for row in rows:
-        print(row[0],row[1],row[2],row[3])
+        print(row[0],row[1],row[2],row[3], row[4])
 
 def delete_assessment():
     print("Assessment list")
