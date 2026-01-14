@@ -8,6 +8,10 @@ conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
 
 cursor.execute("PRAGMA foreign_keys = ON")
+cols = [c[1] for c in cursor.fetchall()]
+if "CreatedAt" not in cols:
+    cursor.execute("ALTER TABLE Assessments ADD COLUMN CreatedAt TEXT")
+    conn.commit()
 
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS Students (
