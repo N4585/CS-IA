@@ -8,10 +8,6 @@ conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
 
 cursor.execute("PRAGMA foreign_keys = ON")
-cols = [c[1] for c in cursor.fetchall()]
-if "CreatedAt" not in cols:
-    cursor.execute("ALTER TABLE Assessments ADD COLUMN CreatedAt TEXT")
-    conn.commit()
 
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS Students (
@@ -35,7 +31,7 @@ CREATE TABLE IF NOT EXISTS Courses (
     CourseID    NUMERIC PRIMARY KEY,
     CourseName  TEXT,
     CourseLevel TEXT,
-    TeacherID NUMERIC,
+    TeacherID INTEGER,
     FOREIGN KEY (TeacherID) REFERENCES Teacher(TeacherID)
 );
 """)
@@ -65,6 +61,35 @@ CREATE TABLE IF NOT EXISTS Assessments (
     CreatedAt TEXT DEFAULT (datetime('now','localtime')),
     FOREIGN KEY (CourseID) REFERENCES Courses(CourseID)
 );
+""")
+
+#adjust student table if it existed
+cursor.execute("PRAGMA table_info(Students)")
+student_cols = [c[1] for c in cursor.fetchall()]
+if "Level" not in student_cols:
+    cursor.execute("ALTER TABLE Students ADD COLUMN Level TEXT")
+    cursor.execute("UPDATE Students SET Level='SL' WHERE Level IS NULL")  # backfill default
+
+# adjust assessment table if it existed
+cursor.execute("PRAGMA table_info(Assessments)")
+ass_cols = [c[1] for c in cursor.fetchall()]
+if "Audience" not in ass_cols:
+    cursor.execute("ALTER TABLE Assessments ADD COLUMN Audience TEXT")
+    cursor.execute("UPDATE Assessments SET Audience='Both' WHERE Audience IS NULL")  # backfill old rows
+
+
+# ---- schema migration: ensure CreatedAt exists ----
+cursor.execute("PRAGMA table_info(Assessments)")
+cols = [c[1] for c in cursor.fetchall()]
+
+if "CreatedAt" not in cols:
+    cursor.execute("ALTER TABLE Assessments ADD COLUMN CreatedAt TEXT")
+
+# ---- backfill CreatedAt for old rows ----
+cursor.execute("""
+UPDATE Assessments
+SET CreatedAt = datetime('now','localtime')
+WHERE CreatedAt IS NULL
 """)
 
 # ---------------------------
@@ -149,7 +174,7 @@ def view_enrollment():
     JOIN Courses ON Enrollments.CourseID = Courses.CourseID;
     """
     rows=cursor.execute(sql)
-    print("EnrollmentID | StudentID | CourseID")
+    print("StudentID | Name | CourseID | CourseName | CourseLevel")
 
     for row in rows:
         print(row[0],"|",row[1],"|",row[2], "|",row[3],"|",row[4])
@@ -161,6 +186,9 @@ def add_assessment():
     assessment_name = input("Enter Assessment Name: ")
     due_date = input("Enter Due Date (YYYY-MM-DD): ")
     priority = int(input("Priority (1 = Major, 0 = Minor): "))
+    if priority not in (0,1):
+            print ("Priority must be 0 or 1")
+            return
     sql = """
     INSERT INTO Assessments (CourseID, AssessmentName, DueDate, Priority, CreatedAt)
     VALUES (?, ?, ?, ?, datetime('now','localtime'))
@@ -169,11 +197,11 @@ def add_assessment():
     conn.commit()
 
 def view_assessment():
-    sql="SELECT * FROM Assessments"
-    rows=cursor.execute(sql)
-    print("AssessmentID | AssessmentName | CourseID | DueDate | Priority")
+    sql = "SELECT AssessmentID, AssessmentName, CourseID, DueDate, Priority, CreatedAt FROM Assessments"
+    rows = cursor.execute(sql)
+    print("AssessmentID | Name | CourseID | DueDate | Priority | CreatedAt")
     for row in rows:
-        print(row[0],row[1],row[2],row[3], row)
+        print(row[0], "|", row[1], "|", row[2], "|", row[3], "|", row[4], "|", row[5])
 
 def delete_assessment():
     print("Assessment list")
@@ -184,6 +212,15 @@ def delete_assessment():
     cursor.execute(sql,(courseid,))
     conn.commit()
     print("Assessment removed successfully")
+
+def delete_assessment_all():
+    confirm = input("Type DELETE to remove ALL assessments: ").strip().upper()
+    if confirm != "DELETE":
+        print("Cancelled.")
+        return
+    cursor.execute("DELETE FROM Assessments")
+    conn.commit()
+    print("All assessments removed.")
 
 def detect_assessment_conflicts():
     sql = """
@@ -256,8 +293,6 @@ def detect_assessment_conflicts():
 
 
 while True:
-    cursor = conn.cursor()
-    conn.commit()
     try:
         print("======================")
         print("press 1 to Add Student")
@@ -270,7 +305,8 @@ while True:
         print("press 8 to Add Assessment")
         print("press 9 to View Assessment")
         print("press 10 to Delete Assessment")
-        print("press 11 to view clashes")
+        print("press 11 to Delete ALL Assessments")
+        print("press 12 to view clashes")
         
         print("press 0 to exit")
         user=int(input())
@@ -297,7 +333,9 @@ while True:
             view_assessment()
         elif user == 10:
             delete_assessment()
-        elif user== 11:
+        elif user==11:
+            delete_assessment_all()
+        elif user== 12:
             detect_assessment_conflicts()
 
 
