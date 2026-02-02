@@ -54,21 +54,22 @@ CREATE TABLE IF NOT EXISTS Enrollments (
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS Assessments (
     AssessmentID INTEGER PRIMARY KEY AUTOINCREMENT,
-    AssessmentName    TEXT NOT NULL,
-    CourseID     NUMERIC NOT NULL,
+    AssessmentName   TEXT NOT NULL,
     DueDate      TEXT NOT NULL,
     Priority     INTEGER CHECK (Priority IN (0,1)),
-    CreatedAt TEXT DEFAULT (datetime('now','localtime')),
-    FOREIGN KEY (CourseID) REFERENCES Courses(CourseID)
+    CreatedAt TEXT DEFAULT (datetime('now','localtime'))
 );
 """)
 
-#adjust student table if it existed
-cursor.execute("PRAGMA table_info(Students)")
-student_cols = [c[1] for c in cursor.fetchall()]
-if "Level" not in student_cols:
-    cursor.execute("ALTER TABLE Students ADD COLUMN Level TEXT")
-    cursor.execute("UPDATE Students SET Level='SL' WHERE Level IS NULL")  # backfill default
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS AssessmentTargets (
+    AssessmentID INTEGER NOT NULL,
+    CourseID NUMERIC NOT NULL,
+    PRIMARY KEY (AssessmentID, CourseID),
+    FOREIGN KEY (AssessmentID) REFERENCES Assessments(AssessmentID) ON DELETE CASCADE,
+    FOREIGN KEY (CourseID) REFERENCES Courses(CourseID) ON DELETE CASCADE 
+);
+""") 
 
 # adjust assessment table if it existed
 cursor.execute("PRAGMA table_info(Assessments)")
@@ -105,8 +106,9 @@ def add_student():
     id= input("Enter Student id:")
     name = input("Name:")
     grade= int(input("Grade level:"))
-    sql = "INSERT INTO Students (StudentID,Name,GradeLevel) VALUES (?,?,?)"
-    cursor.execute(sql, (id,name,grade))
+
+    sql = "INSERT INTO Students (StudentID, Name, GradeLevel) VALUES (?,?,?)"
+    cursor.execute(sql, (id, name, grade))
     conn.commit()
     print("Student added successfully")
 
@@ -133,6 +135,7 @@ def add_course():
     cursor.execute(sql, (id,courseName,courseLevel,teacher))
     conn.commit()
     print("Course added successfully")
+
 
 def delete_course():
     print("Course list")
@@ -182,19 +185,39 @@ def view_enrollment():
 def add_assessment():
     print("------ADD ASSESSMENT-----")
     view_course()
-    course_id = int(input("Enter Course ID: "))
-    assessment_name = input("Enter Assessment Name: ")
-    due_date = input("Enter Due Date (YYYY-MM-DD): ")
+    assessment_name = input("Enter Assessment Name: ").strip()
+    due_date = input("Enter Due Date (YYYY-MM-DD): ").strip()
     priority = int(input("Priority (1 = Major, 0 = Minor): "))
+    
     if priority not in (0,1):
             print ("Priority must be 0 or 1")
             return
-    sql = """
-    INSERT INTO Assessments (CourseID, AssessmentName, DueDate, Priority, CreatedAt)
+    
+    #define target_ids
+    targets_raw = input("Target CourseIDs (comma-separated, e.g. 101,102): ").strip()
+    target_ids = [t.strip() for t in targets_raw.split(",") if t.strip()]
+    if not target_ids:
+        print("You must enter at least one CourseID.")
+        return  
+
+    #insert assessment once
+    cursor.execute("""
+    INSERT INTO Assessments (AssessmentName, DueDate, Priority, CreatedAt)
     VALUES (?, ?, ?, ?, datetime('now','localtime'))
-    """
-    cursor.execute(sql, (course_id, assessment_name, due_date, priority))
+    """, (assessment_name, due_date, priority))
+
+    #get PK (Assessment ID) of the inserted into assessments 
+    assessment_id = cursor.lastrowid 
+
+    #map the courses and relationships
+    for cid in target_ids:
+        cursor.execute("""
+            INSERT OR IGNORE INTO AssessmentTargets (AssessmentID, CourseID)
+            VALUES (?,?)
+        """, (assessment_id, cid))
+        
     conn.commit()
+    print(f"Assessment added (ID={assessment_id}) for courses: {','.join(target_ids)}")
 
 def view_assessment():
     sql = "SELECT AssessmentID, AssessmentName, CourseID, DueDate, Priority, CreatedAt FROM Assessments"
@@ -230,7 +253,8 @@ def detect_assessment_conflicts():
             strftime('%Y-%W', a.DueDate) AS YearWeek,
             COUNT(*) AS MajorCount
         FROM Enrollments e
-        JOIN Assessments a ON e.CourseID = a.CourseID
+        JOIN AssessmentTargets at ON at.CourseID = e.CourseID
+        JOIN Assessments a ON a.AssessmentID = at.AssessmentID
         WHERE a.Priority = 1
         GROUP BY e.StudentID, YearWeek
         HAVING COUNT(*) > 3
@@ -254,7 +278,8 @@ def detect_assessment_conflicts():
     FROM Overloads o
     JOIN Students s ON s.StudentID = o.StudentID
     JOIN Enrollments e ON e.StudentID = o.StudentID
-    JOIN Assessments a ON a.CourseID = e.CourseID
+    JOIN AssessmentTargets at ON at.CourseID = e.CourseID
+    JOIN Assessments a ON a.AssessmentID = at.AssessmentID
     JOIN Courses c ON c.CourseID = a.CourseID
     LEFT JOIN Teacher t ON t.TeacherID = c.TeacherID
     WHERE a.Priority = 1
@@ -268,7 +293,6 @@ def detect_assessment_conflicts():
         print("No assessment conflicts detected.")
         return
 
-    # Group in Python for readable output
     current_key = None
     for r in rows:
         student_id, student_name, year_week, major_count = r[0], r[1], r[2], r[3]
@@ -337,6 +361,8 @@ while True:
             delete_assessment_all()
         elif user== 12:
             detect_assessment_conflicts()
+        elif user== 13:
+            view_course()
 
 
     except sqlite3.Error as e:
