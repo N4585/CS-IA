@@ -204,7 +204,7 @@ def add_assessment():
     #define target_ids
     targets_raw = input("Target CourseIDs (comma-separated, e.g. 101,102): ").strip()
     try: 
-        target_ids = [t.strip() for t in targets_raw.split(",") if t.strip()]
+        target_ids = [int(t.strip()) for t in targets_raw.split(",") if t.strip()]
     except ValueError:
         print("CourseIDs must be numbers.")
         return
@@ -212,6 +212,18 @@ def add_assessment():
         print("You must enter at least one CourseID.")
         return  
 
+    #validation
+    placeholders = ",".join("?" for _ in target_ids)
+    existing = cursor.execute(
+        f"SELECT CourseID FROM Courses WHERE CourseID IN ({placeholders})",
+        target_ids
+    ).fetchall()
+    existing_ids = {r[0] for r in existing}
+
+    missing = [cid for cid in target_ids if cid not in existing_ids]
+    if missing:
+        print(f"Invalid CourseIDs: {missing}")
+        return
     #insert assessment once
     cursor.execute("""
     INSERT INTO Assessments (AssessmentName, DueDate, Priority)
