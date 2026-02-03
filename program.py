@@ -224,11 +224,19 @@ def add_assessment():
     if missing:
         print(f"Invalid CourseIDs: {missing}")
         return
+    
+    #determine the target course level of the assessment
+    audience = input("Audience (SL/HL/Both): ").strip().upper()
+    if audience not in ("SL", "HL", "Both"):
+        print("Audience must be SL, HL, or Both.")
+        return
+    audience = "Both" if audience == "BOTH" else audience
+
     #insert assessment once
     cursor.execute("""
-    INSERT INTO Assessments (AssessmentName, DueDate, Priority)
-    VALUES (?, ?, ?)
-    """, (assessment_name, due_date, priority))
+    INSERT INTO Assessments (AssessmentName, DueDate, Priority, Audience)
+    VALUES (?, ?, ?, ?)
+    """, (assessment_name, due_date, priority, audience))
 
     #get PK (Assessment ID) of the inserted into assessments 
     assessment_id = cursor.lastrowid 
