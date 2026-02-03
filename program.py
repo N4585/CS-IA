@@ -203,7 +203,11 @@ def add_assessment():
     
     #define target_ids
     targets_raw = input("Target CourseIDs (comma-separated, e.g. 101,102): ").strip()
-    target_ids = [t.strip() for t in targets_raw.split(",") if t.strip()]
+    try: 
+        target_ids = [t.strip() for t in targets_raw.split(",") if t.strip()]
+    except ValueError:
+        print("CourseIDs must be numbers.")
+        return
     if not target_ids:
         print("You must enter at least one CourseID.")
         return  
@@ -234,18 +238,19 @@ def view_assessment():
             a.AssessmentName,
             a.DueDate,
             a.Priority,
-            a.CreatedAt
-            GOUP_CONCAT(at.CourseID) AS TargetCourseIDs
+            a.CreatedAt,
+            GROUP_CONCAT(at.CourseID) AS TargetCourseIDs
         FROM Assessments a
         LEFT JOIN AssessmentTargets at ON at.AssessmentID = a.AssessmentID
-        GROUP BY a.AsessmentID
-        ORder BY a.DueDate, a.AssessmentID
+        GROUP BY a.AssessmentID
+        ORDER BY a.DueDate, a.AssessmentID
     """).fetchall()
     
     
     print("AssessmentID | Name | DueDate | Priority | CreatedAt | TargetCourseIDs")
     for row in rows:
-        print(row[0], "|", row[1], "|", row[2], "|", row[3], "|", row[4], "|", (rows[5] or "None"))
+        target_courses = row[5] if row[5] else "None"
+        print(row[0], "|", row[1], "|", row[2], "|", row[3], "|", row[4], "|", target_courses)
 
 def delete_assessment():
     print("Assessment list")
