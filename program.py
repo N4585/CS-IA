@@ -148,11 +148,19 @@ def delete_course():
     print("Course removed successfully")
 
 def view_course():
-    sql="SELECT * FROM Courses"
-    rows=cursor.execute(sql)
-    print("id | name | level | teacher")
-    for row in rows:
-        print(row[0],row[1],row[2],row[3])
+    rows=cursor.execute("""
+        SELECT c.CourseID, c.CourseName, c.CourseLevel, t.TeacherName
+        FROM Courses c
+        LEFT JOIN Teacher t ON t.TeacherID = c.TeacherID
+        ORDER BY c.CourseID
+    """).fetchall()
+
+    print(f"{'CourseID':<8} {'CourseName': <45} {'Level':<6} {'Teacher': <25}")
+    print("-" *90)
+
+    for cid, name, level, teacher in rows:
+        teacher = teacher if teacher else "None"
+        print(f"{cid:<8} {name:<45} {level:<6} {teacher:<25}")
 
 def add_enrollment():
     #shows the list of student iD
@@ -202,8 +210,8 @@ def add_assessment():
 
     #insert assessment once
     cursor.execute("""
-    INSERT INTO Assessments (AssessmentName, DueDate, Priority, CreatedAt)
-    VALUES (?, ?, ?, ?, datetime('now','localtime'))
+    INSERT INTO Assessments (AssessmentName, DueDate, Priority)
+    VALUES (?, ?, ?)
     """, (assessment_name, due_date, priority))
 
     #get PK (Assessment ID) of the inserted into assessments 
@@ -220,11 +228,24 @@ def add_assessment():
     print(f"Assessment added (ID={assessment_id}) for courses: {','.join(target_ids)}")
 
 def view_assessment():
-    sql = "SELECT AssessmentID, AssessmentName, CourseID, DueDate, Priority, CreatedAt FROM Assessments"
-    rows = cursor.execute(sql)
-    print("AssessmentID | Name | CourseID | DueDate | Priority | CreatedAt")
+    rows = cursor.execute("""
+        SELECT 
+            a.AssessmentID,
+            a.AssessmentName,
+            a.DueDate,
+            a.Priority,
+            a.CreatedAt
+            GOUP_CONCAT(at.CourseID) AS TargetCourseIDs
+        FROM Assessments a
+        LEFT JOIN AssessmentTargets at ON at.AssessmentID = a.AssessmentID
+        GROUP BY a.AsessmentID
+        ORder BY a.DueDate, a.AssessmentID
+    """).fetchall()
+    
+    
+    print("AssessmentID | Name | DueDate | Priority | CreatedAt | TargetCourseIDs")
     for row in rows:
-        print(row[0], "|", row[1], "|", row[2], "|", row[3], "|", row[4], "|", row[5])
+        print(row[0], "|", row[1], "|", row[2], "|", row[3], "|", row[4], "|", (rows[5] or "None"))
 
 def delete_assessment():
     print("Assessment list")
@@ -280,7 +301,7 @@ def detect_assessment_conflicts():
     JOIN Enrollments e ON e.StudentID = o.StudentID
     JOIN AssessmentTargets at ON at.CourseID = e.CourseID
     JOIN Assessments a ON a.AssessmentID = at.AssessmentID
-    JOIN Courses c ON c.CourseID = a.CourseID
+    JOIN Courses c ON c.CourseID = at.CourseID
     LEFT JOIN Teacher t ON t.TeacherID = c.TeacherID
     WHERE a.Priority = 1
       AND strftime('%Y-%W', a.DueDate) = o.YearWeek
