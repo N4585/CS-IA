@@ -185,11 +185,6 @@ def delete_assessment(conn, assessment_id):
     )
     conn.commit()
 
-
-# =========================
-# CONFLICT DETECTION
-# =========================
-
 def detect_assessment_conflicts(conn):
     """
     Returns students who have >= 4 major assessments (Priority = 1)
