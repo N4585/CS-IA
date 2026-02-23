@@ -232,7 +232,3 @@ def get_student_conflict_details(conn, student_id, week):
           AND a.Priority = 1
         ORDER BY a.DueDate
     """, (student_id, week)).fetchall()
-
-if __name__ == "__main__":
-    conn = get_connection()
-    ensure_schema(conn)
