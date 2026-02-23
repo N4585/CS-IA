@@ -1,5 +1,5 @@
 from BackEnd import get_connection, ensure_schema
-from GUI import run_app
+from GUI import SchoolApp
 
 def main():
     conn = get_connection()
