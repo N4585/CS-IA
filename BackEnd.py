@@ -187,7 +187,7 @@ def delete_assessment(conn, assessment_id):
 
 def detect_assessment_conflicts(conn):
     """
-    Returns students who have >= 4 major assessments (Priority = 1)
+    Returns students who have more than 3 major assessments (Priority = 1)
     in the same ISO week.
     Audience rule:
       - Both applies to all
@@ -195,6 +195,7 @@ def detect_assessment_conflicts(conn):
       - HL applies only to HL courses
       - Core courses are allowed only if Audience == Both (you can change this rule if your IA says otherwise)
     """
+
     return conn.execute("""
         SELECT 
             s.StudentID,
