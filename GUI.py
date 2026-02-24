@@ -354,8 +354,22 @@ class EnrollmentPage(PageBase):
         self.student_combo = labeled_combo(form, "Student:", values=[])
 
         tk.Label(self.content, text="Select Courses").pack(pady=(8, 0))
-        self.course_listbox = tk.Listbox(self.content, selectmode="multiple", height=8)
-        self.course_listbox.pack(pady=4)
+
+        lb_frame = tk.Frame(self.content)
+        lb_frame.pack(pady=4)
+
+        scrollbar = ttk.Scrollbar(lb_frame, orient="vertical")
+        scrollbar.pack(side="right", fill="y")
+
+        self.course_listbox = tk.Listbox(
+            lb_frame,
+            selectmode="multiple",
+            height=8,
+            yscrollcommand=scrollbar.set
+        )
+        self.course_listbox.pack(side="left")
+
+        scrollbar.config(command=self.course_listbox.yview)
 
         tk.Button(self.content, text="Enroll Selected Courses", command=self.enroll).pack(pady=6)
 
@@ -430,8 +444,22 @@ class AssessmentPage(PageBase):
         self.audience_combo = labeled_combo(form, "Audience:", values=["SL", "HL", "Both"])
 
         tk.Label(self.content, text="Target Courses").pack(pady=(8, 0))
-        self.course_listbox = tk.Listbox(self.content, selectmode="multiple", height=8)
-        self.course_listbox.pack(pady=4)
+
+        lb_frame = tk.Frame(self.content)
+        lb_frame.pack(pady=4)
+
+        scrollbar = ttk.Scrollbar(lb_frame, orient="vertical")
+        scrollbar.pack(side="right", fill="y")
+
+        self.course_listbox = tk.Listbox(
+            lb_frame,
+            selectmode="multiple",
+            height=8,
+            yscrollcommand=scrollbar.set
+        )
+        self.course_listbox.pack(side="left")
+
+        scrollbar.config(command=self.course_listbox.yview)
 
         tk.Button(self.content, text="Add Assessment", command=self.add_assessment_gui).pack(pady=6)
         tk.Button(self.content, text="Delete Selected", command=self.delete_assessment_gui).pack(pady=5)
@@ -496,7 +524,7 @@ class AssessmentPage(PageBase):
                 if suggestion:
                     messagebox.showwarning(
                         "Conflict Detected",
-                        f"A student is overloaded (>=4 major assessments in a week).\n"
+                        f"A student is overloaded with more than three assessments in a week).\n"
                         f"Suggested alternative date: {suggestion}\n\n"
                         f"Current date: {date}"
                     )
@@ -610,7 +638,9 @@ class ReportPage(PageBase):
         self.output.insert("end", f"Name: {report['Name']}\n")
         self.output.insert("end", f"Total Assessments: {report['TotalAssessments']}\n")
         self.output.insert("end", f"Major Assessments: {report['TotalMajor']}\n")
-        self.output.insert("end", f"Overloaded Weeks: {report['OverloadedWeeks']}\n\n")
+
+        weeks_text = ", ".join(report["OverloadedWeeks"]) if report["OverloadedWeeks"] else "None"
+        self.output.insert("end", f"Overloaded Weeks (>=4 majors): {weeks_text}\n\n")
 
         self.output.insert("end", "Details:\n")
         self.output.insert("end", "-" * 80 + "\n")
