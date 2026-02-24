@@ -2,11 +2,6 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from BackEnd import *
 
-
-# -----------------------------
-# Helpers
-# -----------------------------
-
 def is_header_junk(value):
     if value is None:
         return False
@@ -52,10 +47,6 @@ def make_scrollable_tree(parent, columns, headings=None):
     return tree
 
 
-# -----------------------------
-# Base Page Layout (content + fixed bottom bar)
-# -----------------------------
-
 class PageBase(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
@@ -87,10 +78,6 @@ class PageBase(tk.Frame):
     def add_bottom_left_button(self, text, command):
         tk.Button(self.bottom_left, text=text, command=command).pack(side="left", padx=6)
 
-
-# -----------------------------
-# App
-# -----------------------------
 
 class SchoolApp(tk.Tk):
     def __init__(self, conn):
@@ -131,10 +118,7 @@ class SchoolApp(tk.Tk):
         frame.tkraise()
 
 
-# -----------------------------
 # Home Page
-# -----------------------------
-
 class HomePage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
@@ -160,10 +144,7 @@ class HomePage(tk.Frame):
             ).pack(pady=8)
 
 
-# -----------------------------
-# Teachers
-# -----------------------------
-
+# Teachers page
 class TeacherPage(PageBase):
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
@@ -187,6 +168,7 @@ class TeacherPage(PageBase):
                 continue
             self.tree.insert("", "end", values=(t["TeacherID"], t["TeacherName"]))
 
+    #add new teacher feature with validation
     def add_teacher(self):
         name = self.name_entry.get().strip()
         if not name:
@@ -199,6 +181,7 @@ class TeacherPage(PageBase):
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
+    #teacher removal feature
     def delete_teacher(self):
         sel = self.tree.selection()
         if not sel:
@@ -208,10 +191,7 @@ class TeacherPage(PageBase):
         self.refresh()
 
 
-# -----------------------------
-# Courses
-# -----------------------------
-
+# Course Page
 class CoursePage(PageBase):
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
@@ -275,15 +255,12 @@ class CoursePage(PageBase):
         delete_course(self.conn, course_id)
         self.refresh()
 
-
-# -----------------------------
-# Students
-# -----------------------------
-
+# Students Page
 class StudentPage(PageBase):
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
 
+        #Page layout + design
         tk.Label(self.content, text="Students", font=("Arial", 18)).pack(pady=10)
 
         form = tk.Frame(self.content)
@@ -296,12 +273,14 @@ class StudentPage(PageBase):
         tk.Button(self.content, text="Add Student", command=self.add_student).pack(pady=6)
         tk.Button(self.content, text="Delete Selected", command=self.delete_student).pack(pady=5)
 
+        #display for data in student table
         self.tree = make_scrollable_tree(
             self.content,
             columns=("ID", "Name", "Grade"),
             headings=("StudentID", "Name", "Grade")
         )
 
+    #
     def refresh(self):
         self.tree.delete(*self.tree.get_children())
         for s in get_all_students(self.conn):
@@ -309,6 +288,7 @@ class StudentPage(PageBase):
                 continue
             self.tree.insert("", "end", values=(s["StudentID"], s["Name"], s["GradeLevel"]))
 
+    #add student feature with validation
     def add_student(self):
         sid = self.id_entry.get().strip()
         name = self.name_entry.get().strip()
@@ -327,6 +307,7 @@ class StudentPage(PageBase):
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
+    #delete student feature
     def delete_student(self):
         sel = self.tree.selection()
         if not sel:
@@ -335,17 +316,16 @@ class StudentPage(PageBase):
         delete_student(self.conn, sid)
         self.refresh()
 
-
-# -----------------------------
-# Enrollments
-# -----------------------------
-
+# Enrollments Page
 class EnrollmentPage(PageBase):
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
+        
+        #Page design + layout
         self.student_map = {}
         self.course_ids = []
 
+        #heading
         tk.Label(self.content, text="Enrollments", font=("Arial", 18)).pack(pady=10)
 
         form = tk.Frame(self.content)
@@ -373,6 +353,7 @@ class EnrollmentPage(PageBase):
 
         tk.Button(self.content, text="Enroll Selected Courses", command=self.enroll).pack(pady=6)
 
+        #display for data in enrollment table
         self.tree = make_scrollable_tree(
             self.content,
             columns=("StudentID", "Course", "Level"),
@@ -399,6 +380,7 @@ class EnrollmentPage(PageBase):
             for c in sc:
                 self.tree.insert("", "end", values=(s["StudentID"], c["CourseName"], c["CourseLevel"]))
 
+    #add enrollment feature to a student
     def enroll(self):
         student_display = self.student_combo.get()
         if not student_display:
@@ -421,14 +403,12 @@ class EnrollmentPage(PageBase):
 
         self.refresh()
 
-
-# -----------------------------
-# Assessments (with suggestion feature)
-# -----------------------------
-
+# Assessments page
 class AssessmentPage(PageBase):
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
+        
+        #page layout + design
         self.course_ids = []
         self.course_display = []
 
@@ -464,6 +444,7 @@ class AssessmentPage(PageBase):
         tk.Button(self.content, text="Add Assessment", command=self.add_assessment_gui).pack(pady=6)
         tk.Button(self.content, text="Delete Selected", command=self.delete_assessment_gui).pack(pady=5)
 
+        #display for data in assessment table
         self.tree = make_scrollable_tree(
             self.content,
             columns=("ID", "Name", "Date", "Priority", "Audience"),
@@ -487,6 +468,7 @@ class AssessmentPage(PageBase):
                 a["AssessmentID"], a["AssessmentName"], a["DueDate"], a["Priority"], a["Audience"]
             ))
 
+    #add assessment feature with validation
     def add_assessment_gui(self):
         name = self.name_entry.get().strip()
         date = self.date_entry.get().strip()
@@ -494,6 +476,7 @@ class AssessmentPage(PageBase):
         audience = self.audience_combo.get()
         selected = self.course_listbox.curselection()
 
+        #validation
         if not name or not date or priority == "" or audience == "":
             messagebox.showerror("Error", "All fields required")
             return
@@ -510,11 +493,11 @@ class AssessmentPage(PageBase):
             messagebox.showerror("Error", str(e))
             return
 
-        # If major, check conflicts and suggest alternative date for any affected student(s)
+        # alternative date suggestion
+        # logic: when reach max cap for assessments, a closest available date will be suggested to add the assessment without any conflicts
         if int(priority) == 1:
             conflicts = detect_assessment_conflicts(self.conn)
             if conflicts:
-                # show one suggestion (strong enough for IA; you can loop all later)
                 student_id = conflicts[0]["StudentID"]
                 try:
                     suggestion = suggest_alternative_date(self.conn, student_id, date)
@@ -531,6 +514,7 @@ class AssessmentPage(PageBase):
 
         self.refresh()
 
+    #delete assessment feature
     def delete_assessment_gui(self):
         sel = self.tree.selection()
         if not sel:
@@ -540,10 +524,7 @@ class AssessmentPage(PageBase):
         self.refresh()
 
 
-# -----------------------------
-# Conflicts
-# -----------------------------
-
+# Conflict Page
 class ConflictPage(PageBase):
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
@@ -559,9 +540,11 @@ class ConflictPage(PageBase):
 
         self.add_bottom_left_button("Refresh", self.load_conflicts)
 
+    #Refresh feature to update conflicts
     def refresh(self):
         self.load_conflicts()
 
+    #
     def load_conflicts(self):
         self.tree.delete(*self.tree.get_children())
         for c in detect_assessment_conflicts(self.conn):
@@ -589,11 +572,7 @@ class ConflictPage(PageBase):
                 d["AssessmentName"], d["CourseName"], d["CourseLevel"], d["DueDate"], d["TeacherName"]
             ))
 
-
-# -----------------------------
-# Reports (Generate Report Feature)
-# -----------------------------
-
+# Reports Page
 class ReportPage(PageBase):
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
