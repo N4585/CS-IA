@@ -2,9 +2,14 @@ from BackEnd import get_connection, ensure_schema
 from GUI import SchoolApp
 
 def main():
-    conn = get_connection()
+    conn = get_connection("csiaa.db")
     ensure_schema(conn)
-    run_app(conn)
+    app = SchoolApp(conn)
+    app.mainloop()
 
 if __name__ == "__main__":
-    main()
+    from BackEnd import get_connection, ensure_schema
+    conn = get_connection()
+    ensure_schema(conn)
+    app = SchoolApp(conn)
+    app.mainloop()
