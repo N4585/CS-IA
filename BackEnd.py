@@ -189,52 +189,61 @@ def detect_assessment_conflicts(conn):
     """
     Returns students who have >= 4 major assessments (Priority = 1)
     in the same ISO week.
+    Audience rule:
+      - Both applies to all
+      - SL applies only to SL courses
+      - HL applies only to HL courses
+      - Core courses are allowed only if Audience == Both (you can change this rule if your IA says otherwise)
     """
-
     return conn.execute("""
         SELECT 
             s.StudentID,
             s.Name,
             strftime('%Y-%W', a.DueDate) AS Week,
-            COUNT(*) AS MajorCount
+            COUNT(DISTINCT a.AssessmentID) AS MajorCount
         FROM Students s
         JOIN Enrollments e ON s.StudentID = e.StudentID
-        JOIN AssessmentTargets at ON e.CourseID = at.CourseID
+        JOIN Courses c ON e.CourseID = c.CourseID
+        JOIN AssessmentTargets at ON c.CourseID = at.CourseID
         JOIN Assessments a ON at.AssessmentID = a.AssessmentID
         WHERE a.Priority = 1
+          AND (
+                a.Audience = 'Both'
+             OR (a.Audience = c.CourseLevel)      -- SL with SL, HL with HL
+          )
         GROUP BY s.StudentID, Week
-        HAVING COUNT(*) >= 4
+        HAVING COUNT(DISTINCT a.AssessmentID) >= 4
         ORDER BY Week DESC
     """).fetchall()
 
 
 def get_student_conflict_details(conn, student_id, week):
-    """
-    Returns full assessment list for a student in a specific week.
-    """
-
     return conn.execute("""
-        SELECT 
+        SELECT DISTINCT
             a.AssessmentID,
             a.AssessmentName,
             a.DueDate,
             a.Audience,
+            a.Priority,
             c.CourseName,
             c.CourseLevel,
             t.TeacherName
         FROM Enrollments e
-        JOIN AssessmentTargets at ON e.CourseID = at.CourseID
-        JOIN Assessments a ON at.AssessmentID = a.AssessmentID
         JOIN Courses c ON e.CourseID = c.CourseID
+        JOIN AssessmentTargets at ON c.CourseID = at.CourseID
+        JOIN Assessments a ON at.AssessmentID = a.AssessmentID
         LEFT JOIN Teacher t ON c.TeacherID = t.TeacherID
         WHERE e.StudentID = ?
           AND strftime('%Y-%W', a.DueDate) = ?
           AND a.Priority = 1
+          AND (
+                a.Audience = 'Both'
+             OR (a.Audience = c.CourseLevel)
+          )
         ORDER BY a.DueDate
     """, (student_id, week)).fetchall()
 
 # generate report function
-
 def generate_student_report(conn, student_id):
     cursor = conn.cursor()
 
@@ -262,7 +271,7 @@ def generate_student_report(conn, student_id):
         JOIN AssessmentTargets at ON a.AssessmentID = at.AssessmentID
         JOIN Courses c ON at.CourseID = c.CourseID
         JOIN Enrollments e ON e.CourseID = c.CourseID
-        JOIN Teachers t ON c.TeacherID = t.TeacherID
+        LEFT JOIN Teacher t ON c.TeacherID = t.TeacherID
         WHERE e.StudentID = ?
         ORDER BY a.DueDate
     """, (student_id,))
@@ -274,7 +283,7 @@ def generate_student_report(conn, student_id):
     major_count = 0
 
     for r in rows:
-        week = datetime.datetime.strptime(r["DueDate"], "%Y-%m-%d").strftime("%Y-%W")
+        week = datetime.strptime(r["DueDate"], "%Y-%m-%d").strftime("%Y-%W")
 
         if r["Priority"] == 1:
             major_count += 1
@@ -286,7 +295,7 @@ def generate_student_report(conn, student_id):
             "Level": r["CourseLevel"],
             "DueDate": r["DueDate"],
             "Week": week,
-            "Teacher": r["TeacherName"],
+            "Teacher": r["TeacherName"] if r["TeacherName"] else "N/A",
             "Priority": r["Priority"]
         })
 
@@ -302,36 +311,38 @@ def generate_student_report(conn, student_id):
     }
 
 #suggest nearest 3 dates available function
+from datetime import datetime, timedelta
+
 def suggest_alternative_date(conn, student_id, original_date, max_search_days=14):
-    import datetime
+    cur = conn.cursor()
+    base_date = datetime.strptime(original_date, "%Y-%m-%d")
 
-    cursor = conn.cursor()
-    base_date = datetime.datetime.strptime(original_date, "%Y-%m-%d")
-
-    def is_week_overloaded(test_date):
+    def week_major_count(test_date):
         week = test_date.strftime("%Y-%W")
-
-        cursor.execute("""
-            SELECT COUNT(*) as cnt
-            FROM Assessments a
-            JOIN AssessmentTargets at ON a.AssessmentID = at.AssessmentID
-            JOIN Enrollments e ON e.CourseID = at.CourseID
+        cur.execute("""
+            SELECT COUNT(DISTINCT a.AssessmentID) AS cnt
+            FROM Enrollments e
+            JOIN Courses c ON e.CourseID = c.CourseID
+            JOIN AssessmentTargets at ON c.CourseID = at.CourseID
+            JOIN Assessments a ON at.AssessmentID = a.AssessmentID
             WHERE e.StudentID = ?
-            AND a.Priority = 1
-            AND strftime('%Y-%W', a.DueDate) = ?
+              AND a.Priority = 1
+              AND strftime('%Y-%W', a.DueDate) = ?
+              AND (
+                    a.Audience = 'Both'
+                 OR (a.Audience = c.CourseLevel)
+              )
         """, (student_id, week))
+        return cur.fetchone()["cnt"]
 
-        result = cursor.fetchone()
-        return result["cnt"] >= 4
-
+    # Find nearest date where the week is not overloaded
     for i in range(1, max_search_days + 1):
-        forward = base_date + datetime.timedelta(days=i)
-        backward = base_date - datetime.timedelta(days=i)
+        forward = base_date + timedelta(days=i)
+        backward = base_date - timedelta(days=i)
 
-        if not is_week_overloaded(forward):
+        if week_major_count(forward) < 4:
             return forward.strftime("%Y-%m-%d")
-
-        if not is_week_overloaded(backward):
+        if week_major_count(backward) < 4:
             return backward.strftime("%Y-%m-%d")
 
     return None
