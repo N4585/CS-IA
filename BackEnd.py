@@ -232,3 +232,106 @@ def get_student_conflict_details(conn, student_id, week):
           AND a.Priority = 1
         ORDER BY a.DueDate
     """, (student_id, week)).fetchall()
+
+# generate report function
+
+def generate_student_report(conn, student_id):
+    cursor = conn.cursor()
+
+    # Get student name
+    cursor.execute("""
+        SELECT Name FROM Students
+        WHERE StudentID = ?
+    """, (student_id,))
+    student = cursor.fetchone()
+    if not student:
+        return None
+
+    student_name = student["Name"]
+
+    cursor.execute("""
+        SELECT 
+            a.AssessmentID,
+            a.AssessmentName,
+            a.DueDate,
+            a.Priority,
+            c.CourseName,
+            c.CourseLevel,
+            t.TeacherName
+        FROM Assessments a
+        JOIN AssessmentTargets at ON a.AssessmentID = at.AssessmentID
+        JOIN Courses c ON at.CourseID = c.CourseID
+        JOIN Enrollments e ON e.CourseID = c.CourseID
+        JOIN Teachers t ON c.TeacherID = t.TeacherID
+        WHERE e.StudentID = ?
+        ORDER BY a.DueDate
+    """, (student_id,))
+
+    rows = cursor.fetchall()
+
+    report_data = []
+    overload_weeks = {}
+    major_count = 0
+
+    for r in rows:
+        week = datetime.datetime.strptime(r["DueDate"], "%Y-%m-%d").strftime("%Y-%W")
+
+        if r["Priority"] == 1:
+            major_count += 1
+            overload_weeks[week] = overload_weeks.get(week, 0) + 1
+
+        report_data.append({
+            "Assessment": r["AssessmentName"],
+            "Course": r["CourseName"],
+            "Level": r["CourseLevel"],
+            "DueDate": r["DueDate"],
+            "Week": week,
+            "Teacher": r["TeacherName"],
+            "Priority": r["Priority"]
+        })
+
+    overloaded = [w for w, count in overload_weeks.items() if count >= 4]
+
+    return {
+        "StudentID": student_id,
+        "Name": student_name,
+        "TotalAssessments": len(rows),
+        "TotalMajor": major_count,
+        "OverloadedWeeks": overloaded,
+        "Details": report_data
+    }
+
+#suggest nearest 3 dates available function
+def suggest_alternative_date(conn, student_id, original_date, max_search_days=14):
+    import datetime
+
+    cursor = conn.cursor()
+    base_date = datetime.datetime.strptime(original_date, "%Y-%m-%d")
+
+    def is_week_overloaded(test_date):
+        week = test_date.strftime("%Y-%W")
+
+        cursor.execute("""
+            SELECT COUNT(*) as cnt
+            FROM Assessments a
+            JOIN AssessmentTargets at ON a.AssessmentID = at.AssessmentID
+            JOIN Enrollments e ON e.CourseID = at.CourseID
+            WHERE e.StudentID = ?
+            AND a.Priority = 1
+            AND strftime('%Y-%W', a.DueDate) = ?
+        """, (student_id, week))
+
+        result = cursor.fetchone()
+        return result["cnt"] >= 4
+
+    for i in range(1, max_search_days + 1):
+        forward = base_date + datetime.timedelta(days=i)
+        backward = base_date - datetime.timedelta(days=i)
+
+        if not is_week_overloaded(forward):
+            return forward.strftime("%Y-%m-%d")
+
+        if not is_week_overloaded(backward):
+            return backward.strftime("%Y-%m-%d")
+
+    return None
