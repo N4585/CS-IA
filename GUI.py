@@ -2,6 +2,22 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from BackEnd import *
 
+class NavMixin:
+    def add_bottom_nav(self, controller, extra_widgets=None):
+        bar = tk.Frame(self)
+        bar.pack(side="bottom", fill="x", pady=10)
+
+        if extra_widgets:
+            for w in extra_widgets:
+                w.pack(in_=bar, side="left", padx=8)
+
+        tk.Button(
+            bar,
+            text="Return",
+            command=lambda: controller.show_frame(HomePage)
+        ).pack(side="right", padx=10)
+
+        return bar
 
 class SchoolApp(tk.Tk):
     def __init__(self, conn):
@@ -26,6 +42,8 @@ class SchoolApp(tk.Tk):
 
     def show_frame(self, page):
         frame = self.frames[page]
+        if hasattr(frame, "refresh"):
+            frame.refresh()
         frame.tkraise()
 
 
@@ -43,6 +61,7 @@ class HomePage(tk.Frame):
             ("Teachers", TeacherPage),
             ("Courses", CoursePage),
             ("Students", StudentPage),
+            ("Enrollments", EnrollmentPage),
             ("Assessments", AssessmentPage),
             ("Conflicts", ConflictPage)
         ]
@@ -58,7 +77,7 @@ class HomePage(tk.Frame):
 # TEACHER PAGE
 # =========================
 
-class TeacherPage(tk.Frame):
+class TeacherPage(tk.Frame, NavMixin):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.conn = controller.conn
@@ -78,9 +97,8 @@ class TeacherPage(tk.Frame):
 
         tk.Button(self, text="Delete Selected",
                   command=self.delete_teacher).pack(pady=5)
-
-        tk.Button(self, text="Back",
-                  command=lambda: controller.show_frame(HomePage)).pack()
+        
+        self.add_bottom_nav(controller)
 
         self.refresh()
 
@@ -118,7 +136,7 @@ class TeacherPage(tk.Frame):
 # COURSE PAGE
 # =========================
 
-class CoursePage(tk.Frame):
+class CoursePage(tk.Frame, NavMixin):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.conn = controller.conn
@@ -147,10 +165,8 @@ class CoursePage(tk.Frame):
 
         tk.Button(self, text="Delete Selected",
                   command=self.delete_course).pack(pady=5)
-
-        tk.Button(self, text="Back",
-                  command=lambda: controller.show_frame(HomePage)).pack()
-
+        
+        self.ad_bottom_nav(controller)
         self.refresh()
 
     def refresh(self):
@@ -194,7 +210,7 @@ class CoursePage(tk.Frame):
 # STUDENT PAGE
 # =========================
 
-class StudentPage(tk.Frame):
+class StudentPage(tk.Frame, NavMixin):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.conn = controller.conn
@@ -222,10 +238,8 @@ class StudentPage(tk.Frame):
 
         tk.Button(self, text="Delete Selected",
                   command=self.delete_student).pack(pady=5)
-
-        tk.Button(self, text="Back",
-                  command=lambda: controller.show_frame(HomePage)).pack()
-
+        
+        self.ad_bottom_nav(controller)
         self.refresh()
 
     def refresh(self):
@@ -259,23 +273,259 @@ class StudentPage(tk.Frame):
         self.refresh()
 
 
-# =========================
-# ASSESSMENT + CONFLICT PAGES
-# =========================
-
-class AssessmentPage(tk.Frame):
+class EnrollmentPage(tk.Frame, NavMixin):
     def __init__(self, parent, controller):
         super().__init__(parent)
-        tk.Label(self, text="Assessment Page",
-                 font=("Arial", 18)).pack(pady=20)
-        tk.Button(self, text="Back",
-                  command=lambda: controller.show_frame(HomePage)).pack()
+        self.conn = controller.conn
 
+        tk.Label(self, text="Enroll Students", font=("Arial", 18)).pack(pady=10)
 
-class ConflictPage(tk.Frame):
+        # Student dropdown
+        tk.Label(self, text="Student").pack()
+        self.student_combo = ttk.Combobox(self)
+        self.student_combo.pack(pady=5)
+
+        # Course multi-select
+        tk.Label(self, text="Select Courses").pack()
+        self.course_listbox = tk.Listbox(self, selectmode="multiple", height=8)
+        self.course_listbox.pack(pady=5)
+
+        tk.Button(self, text="Enroll",
+                  command=self.enroll).pack(pady=5)
+
+        # Enrollment table
+        self.tree = ttk.Treeview(self,
+                                 columns=("Student", "Course", "Level"),
+                                 show="headings")
+        for col in ("Student", "Course", "Level"):
+            self.tree.heading(col, text=col)
+        self.tree.pack(fill="both", expand=True)
+
+        self.ad_bottom_nav(controller)
+        self.refresh()
+
+    def refresh(self):
+        # Load students
+        students = get_all_students(self.conn)
+        self.student_map = {f"{s['StudentID']} - {s['Name']}": s["StudentID"]
+                            for s in students}
+        self.student_combo["values"] = list(self.student_map.keys())
+
+        # Load courses
+        self.course_listbox.delete(0, tk.END)
+        courses = get_all_courses(self.conn)
+        self.course_ids = []
+        for c in courses:
+            display = f"{c['CourseName']} ({c['CourseLevel']})"
+            self.course_listbox.insert(tk.END, display)
+            self.course_ids.append(c["CourseID"])
+
+        # Refresh table
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        for s in students:
+            courses = get_student_courses(self.conn, s["StudentID"])
+            for c in courses:
+                self.tree.insert("", "end",
+                                 values=(s["StudentID"],
+                                         c["CourseName"],
+                                         c["CourseLevel"]))
+
+    def enroll(self):
+        student_display = self.student_combo.get()
+        if not student_display:
+            messagebox.showerror("Error", "Select student")
+            return
+
+        selected = self.course_listbox.curselection()
+        if not selected:
+            messagebox.showerror("Error", "Select at least one course")
+            return
+
+        student_id = self.student_map[student_display]
+
+        for i in selected:
+            enroll_student(self.conn, student_id, self.course_ids[i])
+
+        self.refresh()
+
+class AssessmentPage(tk.Frame, NavMixin):
     def __init__(self, parent, controller):
         super().__init__(parent)
-        tk.Label(self, text="Conflict Page",
-                 font=("Arial", 18)).pack(pady=20)
-        tk.Button(self, text="Back",
-                  command=lambda: controller.show_frame(HomePage)).pack()
+        self.conn = controller.conn
+
+        tk.Label(self, text="Assessments", font=("Arial", 18)).pack(pady=10)
+
+        self.name_entry = tk.Entry(self)
+        self.name_entry.pack(pady=5)
+
+        self.date_entry = tk.Entry(self)
+        self.date_entry.insert(0, "YYYY-MM-DD")
+        self.date_entry.pack(pady=5)
+
+        self.priority_combo = ttk.Combobox(self,
+                                           values=["0", "1"])
+        self.priority_combo.pack(pady=5)
+
+        self.audience_combo = ttk.Combobox(self,
+                                           values=["SL", "HL", "Both"])
+        self.audience_combo.pack(pady=5)
+
+        tk.Label(self, text="Target Courses").pack()
+
+        self.course_listbox = tk.Listbox(self,
+                                         selectmode="multiple",
+                                         height=8)
+        self.course_listbox.pack(pady=5)
+
+        tk.Button(self, text="Add Assessment",
+                  command=self.add_assessment).pack(pady=5)
+
+        self.tree = ttk.Treeview(self,
+                                 columns=("ID", "Name", "Date",
+                                          "Priority", "Audience"),
+                                 show="headings")
+        for col in ("ID", "Name", "Date", "Priority", "Audience"):
+            self.tree.heading(col, text=col)
+        self.tree.pack(fill="both", expand=True)
+
+        tk.Button(self, text="Delete Selected",
+                  command=self.delete_assessment).pack(pady=5)
+        self.ad_bottom_nav(controller)
+        self.refresh()
+
+    def refresh(self):
+        self.course_listbox.delete(0, tk.END)
+
+        courses = get_all_courses(self.conn)
+        self.course_ids = []
+        for c in courses:
+            display = f"{c['CourseName']} ({c['CourseLevel']})"
+            self.course_listbox.insert(tk.END, display)
+            self.course_ids.append(c["CourseID"])
+
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        for a in get_all_assessments(self.conn):
+            self.tree.insert("", "end",
+                             values=(a["AssessmentID"],
+                                     a["AssessmentName"],
+                                     a["DueDate"],
+                                     a["Priority"],
+                                     a["Audience"]))
+
+    def add_assessment(self):
+        name = self.name_entry.get().strip()
+        date = self.date_entry.get().strip()
+        priority = self.priority_combo.get()
+        audience = self.audience_combo.get()
+        selected = self.course_listbox.curselection()
+
+        if not name or not date or not priority or not audience:
+            messagebox.showerror("Error", "All fields required")
+            return
+
+        if not selected:
+            messagebox.showerror("Error", "Select courses")
+            return
+
+        selected_ids = [self.course_ids[i] for i in selected]
+
+        add_assessment(self.conn,
+                       name,
+                       date,
+                       int(priority),
+                       audience,
+                       selected_ids)
+
+        self.refresh()
+
+    def delete_assessment(self):
+        selected = self.tree.selection()
+        if not selected:
+            return
+
+        assessment_id = self.tree.item(selected[0])["values"][0]
+        delete_assessment(self.conn, assessment_id)
+        self.refresh()
+
+class ConflictPage(tk.Frame, NavMixin):
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.conn = controller.conn
+
+        tk.Label(self, text="Assessment Conflicts",
+                 font=("Arial", 18)).pack(pady=10)
+
+        self.tree = ttk.Treeview(self,
+                                 columns=("StudentID",
+                                          "Name",
+                                          "Week",
+                                          "MajorCount"),
+                                 show="headings")
+
+        for col in ("StudentID", "Name",
+                    "Week", "MajorCount"):
+            self.tree.heading(col, text=col)
+
+        self.tree.pack(fill="both", expand=True)
+
+        self.tree.bind("<Double-1>", self.show_details)
+
+        self.add_bottom_nav(controller, extra_widgets=[
+            tk.Button(self, text="Refresh", command=self.load_conflicts)
+        ])
+        
+        self.load_conflicts()
+
+    def load_conflicts(self):
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        conflicts = detect_assessment_conflicts(self.conn)
+
+        for c in conflicts:
+            self.tree.insert("", "end",
+                             values=(c["StudentID"],
+                                     c["Name"],
+                                     c["Week"],
+                                     c["MajorCount"]))
+
+    def show_details(self, event):
+        selected = self.tree.selection()
+        if not selected:
+            return
+
+        student_id, name, week, _ = \
+            self.tree.item(selected[0])["values"]
+
+        details = get_student_conflict_details(self.conn,
+                                               student_id,
+                                               week)
+
+        popup = tk.Toplevel(self)
+        popup.title(f"Conflict Details - {student_id}")
+
+        tree = ttk.Treeview(popup,
+                            columns=("Assessment",
+                                     "Course",
+                                     "Level",
+                                     "DueDate",
+                                     "Teacher"),
+                            show="headings")
+
+        for col in ("Assessment", "Course",
+                    "Level", "DueDate", "Teacher"):
+            tree.heading(col, text=col)
+
+        tree.pack(fill="both", expand=True)
+
+        for d in details:
+            tree.insert("", "end",
+                        values=(d["AssessmentName"],
+                                d["CourseName"],
+                                d["CourseLevel"],
+                                d["DueDate"],
+                                d["TeacherName"]))

@@ -1,7 +1,7 @@
 import sqlite3
 from datetime import datetime
 
-def get_connection(db_name="school.db"):
+def get_connection(db_name="csiaa.db"):
     conn = sqlite3.connect(db_name)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
